@@ -1,10 +1,10 @@
 
 <!doctype html>
-<html lang="en" xmlns:mso="urn:schemas-microsoft-com:office:office" xmlns:msdt="uuid:C2F41010-65B3-11d1-A29F-00AA00C14882">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title></title>
+  <title>Sails AI Readiness Assessment</title>
   <style>
     :root{
       --bg:#0b1220;
@@ -123,6 +123,12 @@
       border-bottom: 1px dashed rgba(255,255,255,.10);
     }
     .q:last-child{ border-bottom: none; padding-bottom: 6px; }
+    .qset{
+      margin:0;
+      padding:0;
+      border:0;
+      min-inline-size:auto;
+    }
     .q .qt{
       display:flex; gap:10px; align-items:flex-start;
       margin-bottom: 10px;
@@ -404,20 +410,6 @@
     }
   </style>
 
-<!--[if gte mso 9]><xml>
-<mso:CustomDocumentProperties>
-<mso:display_urn_x003a_schemas-microsoft-com_x003a_office_x003a_office_x0023_Editor msdt:dt="string">Eric Wilson</mso:display_urn_x003a_schemas-microsoft-com_x003a_office_x003a_office_x0023_Editor>
-<mso:Order msdt:dt="string">7900.00000000000</mso:Order>
-<mso:ComplianceAssetId msdt:dt="string"></mso:ComplianceAssetId>
-<mso:_activity msdt:dt="string">{&quot;FileActivityType&quot;:&quot;9&quot;,&quot;FileActivityTimeStamp&quot;:&quot;2026-01-07T22:25:24.773Z&quot;,&quot;FileActivityUsersOnPage&quot;:[{&quot;DisplayName&quot;:&quot;Eric Wilson&quot;,&quot;Id&quot;:&quot;ericwilson@sailssoftware.com&quot;},{&quot;DisplayName&quot;:&quot;Chakri Paila&quot;,&quot;Id&quot;:&quot;chakri.paila@sailssoftware.com&quot;}],&quot;FileActivityNavigationId&quot;:null}</mso:_activity>
-<mso:_ExtendedDescription msdt:dt="string"></mso:_ExtendedDescription>
-<mso:display_urn_x003a_schemas-microsoft-com_x003a_office_x003a_office_x0023_Author msdt:dt="string">Eric Wilson</mso:display_urn_x003a_schemas-microsoft-com_x003a_office_x003a_office_x0023_Author>
-<mso:TriggerFlowInfo msdt:dt="string"></mso:TriggerFlowInfo>
-<mso:ContentTypeId msdt:dt="string">0x01010045FE4B559EF07E4B8AC9BAE501D24A68</mso:ContentTypeId>
-<mso:_SourceUrl msdt:dt="string"></mso:_SourceUrl>
-<mso:_SharedFileIndex msdt:dt="string"></mso:_SharedFileIndex>
-</mso:CustomDocumentProperties>
-</xml><![endif]-->
 </head>
 <body>
   <header>
@@ -708,19 +700,21 @@
       const section = document.createElement("div");
       section.className = "q";
       section.innerHTML = `
-        <div class="qt">
-          <div class="badge">Q${idx+1}</div>
-          <h3>${q.text}</h3>
-        </div>
-        <div class="opts" role="radiogroup" aria-label="${q.text}">
-          ${q.options.map((o, i) => `
-            <label class="opt">
-              <input type="radio" name="${q.id}" value="${o.lvl}" aria-label="${o.label}: ${o.text}">
-              <div class="lvl">${String.fromCharCode(65+i)} · Level ${o.lvl}</div>
-              <div class="txt">${o.text}</div>
-            </label>
-          `).join("")}
-        </div>
+        <fieldset class="qset">
+          <legend class="qt">
+            <span class="badge">Q${idx+1}</span>
+            <h3>${q.text}</h3>
+          </legend>
+          <div class="opts" role="radiogroup" aria-label="${q.text}">
+            ${q.options.map((o, i) => `
+              <label class="opt">
+                <input type="radio" name="${q.id}" value="${o.lvl}" aria-label="${o.label}: ${o.text}">
+                <div class="lvl">${String.fromCharCode(65+i)} · Level ${o.lvl}</div>
+                <div class="txt">${o.text}</div>
+              </label>
+            `).join("")}
+          </div>
+        </fieldset>
       `;
       qWrap.appendChild(section);
     });
@@ -777,6 +771,7 @@
   const modal = document.getElementById("modal");
   const seeResultsBtn = document.getElementById("seeResultsBtn");
   const closeBtn = document.getElementById("closeBtn");
+  let lastFocusedEl = null;
 
   const levelText = document.getElementById("levelText");
   const levelDesc = document.getElementById("levelDesc");
@@ -788,6 +783,36 @@
   const smallNote = document.getElementById("smallNote");
   const emailLink = document.getElementById("emailLink");
   const copyLink = document.getElementById("copyLink");
+
+  function getFocusableElements(){
+    return modal.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])');
+  }
+
+  function copyTextWithFallback(text){
+    if (navigator.clipboard && window.isSecureContext){
+      return navigator.clipboard.writeText(text);
+    }
+
+    return new Promise((resolve, reject) => {
+      const helper = document.createElement("textarea");
+      helper.value = text;
+      helper.setAttribute("readonly", "");
+      helper.style.position = "fixed";
+      helper.style.opacity = "0";
+      helper.style.left = "-9999px";
+      document.body.appendChild(helper);
+      helper.focus();
+      helper.select();
+
+      const copied = document.execCommand("copy");
+      document.body.removeChild(helper);
+      if (copied) {
+        resolve();
+      } else {
+        reject(new Error("Copy command failed"));
+      }
+    });
+  }
 
   function openModal(){
     const data = compute();
@@ -817,7 +842,7 @@
     copyLink.onclick = async (e) => {
       e.preventDefault();
       try{
-        await navigator.clipboard.writeText(summary);
+        await copyTextWithFallback(summary);
         copyLink.textContent = "Copied!";
         setTimeout(()=> copyLink.textContent = "Copy summary", 1200);
       }catch(err){
@@ -826,13 +851,19 @@
       }
     };
 
+    lastFocusedEl = document.activeElement;
     modal.classList.add("open");
-    // focus close for accessibility
-    setTimeout(()=> closeBtn.focus(), 0);
+    const focusable = getFocusableElements();
+    const initialFocus = focusable.length > 0 ? focusable[0] : closeBtn;
+    setTimeout(()=> initialFocus.focus(), 0);
   }
 
   function closeModal(){
     modal.classList.remove("open");
+    if (lastFocusedEl && typeof lastFocusedEl.focus === "function"){
+      lastFocusedEl.focus();
+      return;
+    }
     seeResultsBtn.focus();
   }
 
@@ -842,7 +873,30 @@
     if (e.target === modal) closeModal();
   });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && modal.classList.contains("open")) closeModal();
+    if (!modal.classList.contains("open")) return;
+    if (e.key === "Escape"){
+      closeModal();
+      return;
+    }
+    if (e.key === "Tab"){
+      const focusable = Array.from(getFocusableElements());
+      if (!focusable.length){
+        e.preventDefault();
+        return;
+      }
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const current = document.activeElement;
+
+      if (e.shiftKey && current === first){
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && current === last){
+        e.preventDefault();
+        first.focus();
+      }
+    }
   });
 
   // Reset
